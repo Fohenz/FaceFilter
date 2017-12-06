@@ -47,7 +47,6 @@
     2011.  SSE4 is the next fastest and is supported by most current machines.  
 */
 
-#include "data.h"
 #include "main.h"
 #include "view.h"
 #include "landmark.h"
@@ -65,7 +64,7 @@ using namespace std;
 
 // ----------------------------------------------------------------------------------------
 
-std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, int sticker, camera_detected_face_s *faces, int count)
+std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, shape_predictor sp, int sticker, camera_detected_face_s *faces, int count)
 {  
     try
     {
@@ -79,23 +78,6 @@ std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, i
         // landmark positions given an image and face bounding box.  Here we are just
         // loading the model from the shape_predictor_68_face_landmarks.dat file you gave
         // as a command line argument.
-        shape_predictor sp;
-
-        float time;
-        clock_t begin = clock();
-        const char* resource_path = app_get_resource_path();
-        char *file_path = (char *) malloc(sizeof(char) * BUFLEN);
-
-        /* Create a full path to newly created file for storing the taken photo. */
-        snprintf(file_path, BUFLEN, "%s%s", resource_path,
-                        "shape_predictor_68_face_landmarks.dat");
-
-        deserialize(file_path) >> sp;
-
-        {
-        	dlog_print(DLOG_DEBUG, LOG_TAG, "deserialize: %f", (double)(clock() - begin) / CLOCKS_PER_SEC);
-        	time = (double)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 14 sec..
-        }
         dlog_print(DLOG_DEBUG, LOG_TAG, "processing image");
 
         // Now tell the face detector to give us a list of bounding boxes
@@ -116,9 +98,9 @@ std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, i
 
 
 
-        begin = clock();
+        double_t begin = clock();
         array2d<u_int64_t> img;
-        img.set_size(frame->width, frame->height);
+        img.set_size(frame->height, frame->width);
         if(frame->data.double_plane.y_size != frame->width * frame->height)
         {
         	//DLOG_PRINT_DEBUG("y_size: %d, width: %d, height: %d", frame->data.double_plane.y_size, frame->width, frame->height);
@@ -127,9 +109,9 @@ std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, i
 
         for(u_int64_t i = 0; i < frame->data.double_plane.y_size; i++)
         {
-        	img[i%frame->width][i/frame->width] = (frame->data.double_plane.y)[i];
+        	img[i/frame->width][i%frame->width] = (frame->data.double_plane.y)[i];
         }
-        time = (double)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.411 sec
+        double_t time = (double_t)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.411 sec
 
         // Now we will go ask the shape_predictor to tell us the pose of
         // each face we detected.
@@ -138,20 +120,20 @@ std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, i
         {
         	begin = clock();
         	full_object_detection shape = sp(img, v_faces[i]);
-        	time = (double)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.1 sec
+        	time = (double_t)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.1 sec
 
         	{
         		dlog_print(DLOG_DEBUG, LOG_TAG, "shape predictor: %f", (double)(clock() - begin) / CLOCKS_PER_SEC);
         		dlog_print(DLOG_DEBUG, LOG_TAG, "number of parts: %d", shape.num_parts());
         	}
         	int np = shape.num_parts();
-        	int part33_x = shape.part(33)(0);
-        	int part33_y = shape.part(33)(1);
-        	int part8_x = shape.part(8)(0);
-        	int part8_y = shape.part(8)(1);
+        	int part33_r = shape.part(33)(0);
+        	int part33_c = shape.part(33)(1);
+        	int part8_r = shape.part(8)(0);
+        	int part8_c = shape.part(8)(1);
 
-        	int part0_x = shape.part(0)(0);
-        	int part0_y = shape.part(0)(1);
+        	int part0_r = shape.part(0)(0);
+        	int part0_c = shape.part(0)(1);
 
         	//draw_landmark(frame, shape);
         	/*
@@ -178,7 +160,7 @@ std::vector<full_object_detection> face_landmark(camera_preview_data_s* frame, i
         	// You get the idea, you can get all the face part locations if
             // you want them.  Here we just store them in shapes so we can
             // put them on the screen.
-            shapes.push_back(shape);
+            shapes[i] = shape;
         }
             
         // We can also extract copies of each face that are cropped, rotated upright,
@@ -205,10 +187,10 @@ void draw_landmark(camera_preview_data_s* frame, const full_object_detection sha
 {
 	for(int i = 0; i < shape.num_parts(); i++)
 	{
-		int x = shape.part(i)(0);
-		int y = shape.part(i)(1);
+		int r = shape.part(i)(0);
+		int c = shape.part(i)(1);
 
-		frame->data.double_plane.y[x + y*frame->width] *= 2;
+		frame->data.double_plane.y[c + r*frame->width] *= 2;
 	}
 }
 /*

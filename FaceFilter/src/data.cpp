@@ -20,9 +20,6 @@
 
 typedef struct _camdata {
     camera_h g_camera; /* Camera handle */
-    camera_preview_data_s *frame; /* Frame handle */
-    //media_packet_h media_packet;
-    std::vector<dlib::full_object_detection> shapes;
 
     Evas_Object *cam_display;
     Evas_Object *cam_display_box;
@@ -39,10 +36,15 @@ typedef struct _camdata {
     int sticker;
     int width;
     int height;
+    //int face_count;
 } camdata;
 
+std::vector<dlib::full_object_detection> shapes;
 static camdata cam_data;
 //static rgbmat rgb_frame;
+camera_detected_face_s* faces;
+dlib::shape_predictor sp;
+int face_count;
 
 static char *camera_directory = NULL;
 
@@ -883,14 +885,21 @@ void _pinky_mod_uv(unsigned char* data, uint64_t size)
 			data[i] *= 1.2;
 	}
 }
-
+/*
 void _camera_preview_callback(camera_preview_data_s *frame, void *data)
 {
     if (frame->format == CAMERA_PIXEL_FORMAT_NV12 && frame->num_of_planes == 2)
 	{
-    	cam_data.frame = (camera_preview_data_s *)malloc(sizeof(camera_preview_data_s));
-    	memcpy(cam_data.frame, frame, sizeof(camera_preview_data_s ));
     	time_t sTime = clock();
+
+    	int error_code = camera_start_face_detection(cam_data.g_camera, _camera_face_detected_cb, NULL);
+    	if(CAMERA_ERROR_NONE != error_code)
+    	{
+    		DLOG_PRINT_ERROR("camera_start_face_detection error", error_code);
+    		return;
+    	}
+
+    	cam_data.shapes = face_landmark(frame, cam_data.faces, cam_data.face_count);
 
     	if(!cam_data.shapes.empty())
     	{
@@ -902,7 +911,7 @@ void _camera_preview_callback(camera_preview_data_s *frame, void *data)
     	// frame->data.double_plane.uv_size : 460800
     	//camera_attr_set_effect(cam_data.g_camera, cam_data.filter);
     	dlog_print(DLOG_DEBUG, "hello", "%d", cam_data.filter);
-
+*/
     	/*
     	switch(cam_data.filter)
     	{
@@ -940,7 +949,7 @@ void _camera_preview_callback(camera_preview_data_s *frame, void *data)
     		break;
     	}
     	*/
-
+/*
     	time_t eTime = clock();
     	float gap = (float)(eTime-sTime)/(CLOCKS_PER_SEC);
 	}
@@ -950,7 +959,7 @@ void _camera_preview_callback(camera_preview_data_s *frame, void *data)
 		PRINT_MSG("This preview frame format is not supported!");
 		//we do nothing, the preview is left intact and displayed without modifications
 	}
-}
+}*/
 
 static void __camera_cb_filter(void *data, Evas_Object *obj, void *event_info)
 {
@@ -990,10 +999,10 @@ static void __camera_cb_filter(void *data, Evas_Object *obj, void *event_info)
 
 
 	    /* TODO: Apply filter to preview image */
-	    if (camera_set_preview_cb(cam_data.g_camera, _camera_preview_callback, NULL) == CAMERA_ERROR_NONE)
-	    {
-	    	PRINT_MSG("ready to modify");
-	    }
+	    //if (camera_set_preview_cb(cam_data.g_camera, _camera_preview_callback, NULL) == CAMERA_ERROR_NONE)
+	    //{
+	    	//PRINT_MSG("ready to modify");
+	    //}
 }
 
 static int camera_attr_get_sticker_range(int* min,
@@ -1097,6 +1106,7 @@ static void nv12_to_rgb(camera_preview_data_s frame)
 		int size = frame.data.double_plane.y_size;
 
 		result.r = (unsigned char *)malloc(sizeof(unsigned char)*size);
+
 		result.g = (unsigned char *)malloc(sizeof(unsigned char)*size);
 		result.b = (unsigned char *)malloc(sizeof(unsigned char)*size);
 
@@ -1110,17 +1120,12 @@ static void nv12_to_rgb(camera_preview_data_s frame)
 }
 */
 
-static void _camera_face_detected_cb(camera_detected_face_s* faces, int count, void* user_data)
+static void _camera_face_detected_cb(camera_detected_face_s* c_faces, int c_face_count, void* data)
 {
 	//if(cam_data.sticker != 0)
 	{
-		if (cam_data.frame->format == CAMERA_PIXEL_FORMAT_NV12 && cam_data.frame->num_of_planes == 2)
-		{
-
-		}
-		cam_data.shapes = face_landmark(cam_data.frame, cam_data.sticker, faces, count);
-
-
+		faces = c_faces;
+		face_count = c_face_count;
 
 	}
 
@@ -1138,6 +1143,171 @@ static void _camera_media_packet_preview_cb(media_packet_h pkt, void* data)
 
 }
 */
+
+
+using namespace dlib;
+using namespace std;
+
+void face_landmark(unsigned char* y_data, int height, int width, int y_size)
+{
+	try
+    {
+        // We need a face detector.  We will use this to get bounding boxes for
+        // each face in an image.
+
+        //frontal_face_detector detector = get_frontal_face_detector();
+    	// We will use camera_start_face_detection api.
+
+        // And we also need a shape_predictor.  This is the tool that will predict face
+        // landmark positions given an image and face bounding box.  Here we are just
+        // loading the model from the shape_predictor_68_face_landmarks.dat file you gave
+        // as a command line argument.
+        dlog_print(DLOG_DEBUG, LOG_TAG, "processing image");
+
+        // Now tell the face detector to give us a list of bounding boxes
+        // around all the faces in the image.
+
+        /* TODO: camera_detected_face_s faces -> vector<rectangle> faces */
+        //std::vector<rectangle> faces = detector(img);
+        std::vector<rectangle> v_faces;
+        for(int i = 0; i < face_count; i++)
+        {
+        	rectangle face;
+			face.set_top(faces[i].y);
+			face.set_bottom(faces[i].y + faces[i].height);
+			face.set_right(faces[i].x + faces[i].width);
+			face.set_left(faces[i].x);
+			v_faces.push_back(face);
+        }
+
+
+
+        double_t begin = clock();
+        array2d<u_int64_t> img;
+        img.set_size(height, width);
+
+        for(u_int64_t i = 0; i < y_size; i++)
+        {
+        	img[i/width][i%width] = y_data[i];
+        }
+        double_t time = (double_t)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.411 sec
+
+        // Now we will go ask the shape_predictor to tell us the pose of
+        // each face we detected.
+        std::vector<full_object_detection> shapes;
+        for (unsigned long i = 0; i < face_count; ++i)
+        {
+        	begin = clock();
+        	full_object_detection shape = sp(img, v_faces[i]);
+        	time = (double_t)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.1 sec
+
+        	{
+        		dlog_print(DLOG_DEBUG, LOG_TAG, "shape predictor: %f", (double)(clock() - begin) / CLOCKS_PER_SEC);
+        		dlog_print(DLOG_DEBUG, LOG_TAG, "number of parts: %d", shape.num_parts());
+        	}
+        	int np = shape.num_parts();
+        	int part33_r = shape.part(33)(0);
+        	int part33_c = shape.part(33)(1);
+        	int part8_r = shape.part(8)(0);
+        	int part8_c = shape.part(8)(1);
+
+        	int part0_r = shape.part(0)(0);
+        	int part0_c = shape.part(0)(1);
+
+        	//draw_landmark(frame, shape);
+        	/*
+        	switch(sticker) {
+        	case 1:
+        		sticker_mustache(shape);
+        		break;
+        	case 2:
+        		sticker_hairband(shape);
+        		break;
+        	case 3:
+        		sticker_ear(shape);
+        		break;
+        	case 4:
+        		sticker_hat(shape);
+        		break;
+        	case 5:
+        		sticker_glasses(shape);
+        		break;
+        	default:
+        		break;
+        	}
+*/
+        	// You get the idea, you can get all the face part locations if
+            // you want them.  Here we just store them in shapes so we can
+            // put them on the screen.
+            shapes[i] = shape;
+        }
+
+        // We can also extract copies of each face that are cropped, rotated upright,
+            // and scaled to a standard size as shown here:
+            /*
+            dlib::array<array2d<rgb_pixel> > face_chips;
+            extract_image_chips(img, get_face_chip_details(shapes), face_chips);
+            win_faces.set_image(tile_images(face_chips));
+            */
+
+    }
+
+    catch (exception& e)
+    {
+    	dlog_print(DLOG_ERROR, LOG_TAG, "\nexception thrown!");
+    	dlog_print(DLOG_ERROR, LOG_TAG, e.what());
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void _camera_preview_callback(camera_preview_data_s *frame, void *data)
+{
+    if (frame->format == CAMERA_PIXEL_FORMAT_NV12 && frame->num_of_planes == 2)
+	{
+    	time_t sTime = clock();
+
+    	int error_code = camera_start_face_detection(cam_data.g_camera, _camera_face_detected_cb, NULL);
+    	if(CAMERA_ERROR_NONE != error_code)
+    	{
+    		DLOG_PRINT_ERROR("camera_start_face_detection error", error_code);
+    		return;
+    	}
+
+    	if(face_count != 0)
+    	{
+    		face_landmark(frame->data.double_plane.y, frame->height, frame->width, frame->data.double_plane.y_size);
+    	}
+
+    	if(!shapes.empty())
+    	{
+    		dlib::full_object_detection shape = shapes[0];
+    		draw_landmark(frame, shape);
+    	}
+    	dlog_print(DLOG_DEBUG, "hello", "%d", cam_data.filter);
+
+    	time_t eTime = clock();
+    	float gap = (float)(eTime-sTime)/(CLOCKS_PER_SEC);
+	}
+	else
+	{
+		dlog_print(DLOG_ERROR, LOG_TAG, "This preview frame format is not supported!");
+		PRINT_MSG("This preview frame format is not supported!");
+		//we do nothing, the preview is left intact and displayed without modifications
+	}
+}
 
 
 static void __camera_cb_sticker(void *data, Evas_Object *obj, void *event_info)
@@ -1176,16 +1346,63 @@ static void __camera_cb_sticker(void *data, Evas_Object *obj, void *event_info)
 	    } else
 	        PRINT_MSG("Sticker set to %d", sticker);
 
-	    if (camera_set_preview_cb(cam_data.g_camera, _camera_preview_callback, NULL) == CAMERA_ERROR_NONE)
+		   float time;
+		   clock_t begin = clock();
+		   const char* resource_path = app_get_resource_path();
+		   char *file_path = (char *) malloc(sizeof(char) * BUFLEN);
+
+		   /* Create a full path to newly created file for storing the taken photo. */
+		   snprintf(file_path, BUFLEN, "%s%s", resource_path, "shape_predictor_68_face_landmarks.dat");
+		   dlib::deserialize(file_path) >> sp;
+		   {
+			   dlog_print(DLOG_DEBUG, LOG_TAG, "deserialize: %f", (double)(clock() - begin) / CLOCKS_PER_SEC);
+			   time = (double)(clock() - begin) / CLOCKS_PER_SEC; // TM1: 14 sec..
+		   }
+
+	   error_code = camera_unset_preview_cb(cam_data.g_camera);
+	   if(CAMERA_ERROR_NONE != error_code)
+	   {
+		   DLOG_PRINT_ERROR("camera_unset_preview_cb", error_code);
+	   }
+
+	   error_code = camera_stop_preview(cam_data.g_camera);
+	   	        if (CAMERA_ERROR_NONE != error_code) {
+	   	            DLOG_PRINT_ERROR("camera_stop_preview", error_code);
+	   	            PRINT_MSG("Could not stop the camera preview.");
+	   	        }
+
+
+	   /* Set preview callback */
+	   error_code = camera_set_preview_cb(cam_data.g_camera, _camera_preview_callback, NULL);
+
+	    if (error_code != CAMERA_ERROR_NONE)
 	    {
-	    	PRINT_MSG("ready to modify");
+	    	DLOG_PRINT_ERROR("CAMERA_SET_PREVIEW_CB", error_code);
 	    }
 
-	    error_code = camera_start_face_detection(cam_data.g_camera, _camera_face_detected_cb, NULL);
-	    if(CAMERA_ERROR_NONE != error_code)
-	    {
-	    	DLOG_PRINT_ERROR("camera_start_face_detection error", error_code);
-	    }
+	        error_code = camera_start_preview(cam_data.g_camera);
+	        if (CAMERA_ERROR_NONE != error_code) {
+	            DLOG_PRINT_ERROR("camera_start_preview", error_code);
+	            PRINT_MSG("Could not restart the camera preview.");
+	        }
+
+	        /*
+	         * The following actions (start -> stop -> start preview) are required
+	         * to deal with a bug related to the camera brightness changes
+	         * (without applying this workaround, after taking a photo,
+	         * the changes of the camera preview brightness are not visible).
+	         */
+	        error_code = camera_stop_preview(cam_data.g_camera);
+	        if (CAMERA_ERROR_NONE != error_code) {
+	            DLOG_PRINT_ERROR("camera_stop_preview", error_code);
+	            PRINT_MSG("Could not stop the camera preview.");
+	        }
+
+	        error_code = camera_start_preview(cam_data.g_camera);
+	        if (CAMERA_ERROR_NONE != error_code) {
+	            DLOG_PRINT_ERROR("camera_start_preview", error_code);
+	            PRINT_MSG("Could not restart the camera preview.");
+	        }
 }
 
 /**
@@ -1206,17 +1423,9 @@ void camera_pop_cb()
     /* Unregister camera focus change callback. */
     camera_unset_focus_changed_cb(cam_data.g_camera);
 
-    /* Unregister camera preview callback. */
-
     /* Destroy camera handle. */
     camera_destroy(cam_data.g_camera);
     cam_data.g_camera = NULL;
-
-    /* Destroy source */
-   // mv_destroy_source(cam_data.g_source);
-
-    /* Destroy engine */
-    //mv_destroy_engine_config(cam_data.g_engine_config);
 
     /* Free the Camera directory path. */
     free(camera_directory);
