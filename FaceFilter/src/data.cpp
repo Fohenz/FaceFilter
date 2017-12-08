@@ -130,6 +130,8 @@ static bool _preview_resolution_cb(int width, int height, void *user_data) {
 		int *resolution = (int *) user_data;
 		resolution[0] = width;
 		resolution[1] = height;
+		if (width > 700)
+			return false;
 	}
 
 	return true;
@@ -910,10 +912,10 @@ static void _camera_face_detected_cb(camera_detected_face_s* faces, int count,
 	/* convert camera_detected_face_s faces to std::vector<rectangle> faces */
 	for (int i = 0; i < count; i++) {
 		dlib::rectangle face;
-		face.set_top(faces[i].x + faces[i].width);
-		face.set_bottom(faces[i].x);
-		face.set_right(faces[i].y);
-		face.set_left(faces[i].y + faces[i].height);
+		face.set_top(faces[i].x);
+		face.set_bottom(faces[i].x + faces[i].height);
+		face.set_right(cam_data.height - faces[i].y);
+		face.set_left(cam_data.height - faces[i].y - faces[i].width);
 		cam_data.faces.push_back(face);
 
 		//PRINT_MSG("Face[%d]_width: %d, Face[%d]_height: %d\n", i, faces[i].width, i, faces[i].height);
@@ -935,10 +937,12 @@ void face_landmark(camera_preview_data_s *frame, int count)
 		//return NULL;
 	}
 
-	//begin = clock();
-	for (u_int64_t i = 0; i < frame->data.double_plane.y_size; i++) {
-		img[i / frame->height][i % frame->height] = (frame->data.double_plane.y)[i];
+
+	for (int i = 0; i < frame->data.double_plane.y_size; i++) {
+		// img[i % frame->width][ i / frame->width] = (frame->data.double_plane.y)[i];
+		img[i % frame->width][frame->height - i / frame->width-1] = (frame->data.double_plane.y)[i];
 	}
+
 	//float time = (double) (clock() - begin) / CLOCKS_PER_SEC; // TM1: 0.3 sec
 	//PRINT_MSG("frame format conversion takes %f sec", time);
 
@@ -1228,7 +1232,9 @@ void create_buttons_in_main_window(void) {
 	elm_object_disabled_set(cam_data.sticker_bt, EINA_TRUE);
 
 	/* Create the camera handle for the main camera of the device. */
-	int error_code = camera_create(CAMERA_DEVICE_CAMERA0, &(cam_data.g_camera));
+	// CAMEAR_DEVICE_CAMERA0 : rear
+	// CAMEAR_DEVICE_CAMERA1 : front
+	int error_code = camera_create(CAMERA_DEVICE_CAMERA0	, &(cam_data.g_camera));
 	if (CAMERA_ERROR_NONE != error_code) {
 		DLOG_PRINT_ERROR("camera_create", error_code);
 		PRINT_MSG("Could not create a handle to the camera.");
@@ -1298,7 +1304,7 @@ void create_buttons_in_main_window(void) {
 	/* 2. Set found supported resolution for the camera preview. */
 	//error_code = camera_set_preview_resolution(cam_data.g_camera, resolution[0],
 	//resolution[1]);
-	error_code = camera_set_preview_resolution(cam_data.g_camera, 480, 360);
+	error_code = camera_set_preview_resolution(cam_data.g_camera, resolution[0], resolution[1]);
 	if (CAMERA_ERROR_NONE != error_code) {
 		DLOG_PRINT_ERROR("camera_set_preview_resolution", error_code);
 		PRINT_MSG("Could not set the camera preview resolution.");
