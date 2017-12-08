@@ -61,14 +61,12 @@ using namespace std;
 
 void draw_landmark(camera_preview_data_s* frame, const full_object_detection shape)
 {
-	int cw = frame->width/2;
-	int ch = frame->height/2;
 	for(int i = 0; i < shape.num_parts(); i++)
 	{
-		int x = frame->height - shape.part(i)(0);
-		int y = shape.part(i)(1);
+		int x = shape.part(i)(1);
+		int y = frame->height - shape.part(i)(0);
 
-		int begin = (y-2) + (x-2)*frame->width;
+		int begin = (x-2) + (y-2)*frame->width;
 		for(int q=0;q<4;q++)
 			for(int p=0;p<4;p++)
 			{

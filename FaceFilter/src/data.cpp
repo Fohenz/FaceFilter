@@ -130,7 +130,11 @@ static bool _preview_resolution_cb(int width, int height, void *user_data) {
 		int *resolution = (int *) user_data;
 		resolution[0] = width;
 		resolution[1] = height;
-		if (width > 700)
+		// resolution 176 144
+		return false;
+
+		// resolution 480
+		if (width > 400)
 			return false;
 	}
 
@@ -1311,8 +1315,8 @@ void create_buttons_in_main_window(void) {
 	} else
 		PRINT_MSG("Camera resolution set to: %d %d", resolution[0],
 				resolution[1]);
-	cam_data.height = resolution[0];
-	cam_data.width = resolution[1];
+	cam_data.width = resolution[0];
+	cam_data.height = resolution[1];
 
 	//camera_foreach_supported_preview_format(cam_data.g_camera, _supported_preview_format_cb, NULL);
 
